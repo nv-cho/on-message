@@ -11,6 +11,7 @@ export type ArkivWalletClient = ReturnType<typeof createWalletClient>;
 export const ARKIV_CHAIN = mendoza;
 export const ARKIV_PRIVATE_KEY = process.env
   .PRIVATE_KEY_USER_A! as `0x${string}`;
+export const ARKIV_CHAIN_ID_HEX = "0xe0087f840" as const; // 60138453056 in hex
 export const ARKIV_RPC_HTTP_URL =
   process.env.NEXT_PUBLIC_ARKIV_RPC_HTTP_URL ??
   "https://mendoza.hoodi.arkiv.network/rpc";
