@@ -93,6 +93,7 @@ export async function listInvitesFor(address: string): Promise<ChatInvite[]> {
   return entities.map((e) => {
     const attrs = attrsToMap(e.attributes);
     return {
+      entityKey: e.key,
       roomKey: attrs.roomKey,
       from: attrs.from,
       to: attrs.to,
@@ -168,4 +169,11 @@ export async function sendMessage(params: {
 
     expiresIn: ExpirationTime.fromDays(3),
   });
+}
+
+export async function deleteArkivEntity(
+  entityKey: `0x${string}`
+): Promise<void> {
+  const walletClient = getWalletClient();
+  await walletClient.deleteEntity({ entityKey });
 }

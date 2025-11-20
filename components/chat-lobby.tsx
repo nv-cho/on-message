@@ -6,43 +6,22 @@ import { useRouter } from "next/navigation";
 import useArkiv from "@/hooks/useArkiv";
 import type { ChatInvite } from "@/lib/chat/types";
 
-type InviteWithId = ChatInvite & {};
+const INVITE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+
+type InviteWithMeta = ChatInvite & {
+  expiresAt: number;
+};
 
 const ChatLobby = () => {
   const router = useRouter();
   const { account, isConnected, connect } = useArkiv();
 
-  const [invites, setInvites] = useState<InviteWithId[]>([]);
-  const [loadingInvites, setLoadingInvites] = useState(false);
-  const [peerAddress, setPeerAddress] = useState("");
-  const [creating, setCreating] = useState(false);
-
-  // fetch invites when wallet connected
-  useEffect(() => {
-    if (!account) return;
-
-    const fetchInvites = async () => {
-      setLoadingInvites(true);
-      try {
-        const res = await fetch(`/api/invites?address=${account}`);
-        if (!res.ok) {
-          console.error(
-            "[ChatLobby] failed to fetch invites",
-            await res.text()
-          );
-          return;
-        }
-        const json = await res.json();
-        setInvites(json.invites ?? []);
-      } catch (err) {
-        console.error("[ChatLobby] error fetching invites", err);
-      } finally {
-        setLoadingInvites(false);
-      }
-    };
-
-    fetchInvites();
-  }, [account]);
+  const [now, setNow] = useState<number>(Date.now());
+  const [invites, setInvites] = useState<InviteWithMeta[]>([]);
+  const [creating, setCreating] = useState<boolean>(false);
+  const [peerAddress, setPeerAddress] = useState<string>("");
+  const [loadingInvites, setLoadingInvites] = useState<boolean>(false);
+  const [isDeletingInvite, setIsDeletingInvite] = useState<boolean>(false);
 
   const handleOpenChat = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -97,6 +76,104 @@ const ChatLobby = () => {
     );
   };
 
+  const handleDeleteInvite = async (invite: InviteWithMeta) => {
+    if (!invite.entityKey) return;
+    if (isDeletingInvite) return;
+
+    const prevInvites = invites;
+
+    // optimistic: remove from UI immediately
+    setInvites((current) =>
+      current.filter((i) => i.entityKey !== invite.entityKey)
+    );
+    setIsDeletingInvite(true);
+
+    try {
+      const res = await fetch(`/api/invites/${invite.entityKey}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error("[ChatLobby] delete invite failed", res.status, errText);
+        // rollback if server failed
+        setInvites(prevInvites);
+        return;
+      }
+      // success: UI already updated
+    } catch (err) {
+      console.error("[ChatLobby] delete invite error", err);
+      // rollback on network error
+      setInvites(prevInvites);
+    } finally {
+      setIsDeletingInvite(false);
+    }
+  };
+
+  // ticking clock for the timers
+  useEffect(() => {
+    const id = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, []);
+
+  // polling invites
+  useEffect(() => {
+    if (!account) return;
+
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const fetchInvites = async () => {
+      if (cancelled) return;
+      if (isDeletingInvite) return; // pause polling while deletion in-flight
+
+      setLoadingInvites(true);
+      try {
+        const res = await fetch(`/api/invites?address=${account}`);
+        if (!res.ok) {
+          console.error(
+            "[ChatLobby] failed to fetch invites",
+            await res.text()
+          );
+          return;
+        }
+
+        const json = await res.json();
+        const rawInvites: ChatInvite[] = json.invites ?? [];
+
+        const withMeta: InviteWithMeta[] = rawInvites.map((inv) => {
+          const createdAtMs = inv.createdAt ?? 0;
+          const expiresAt = createdAtMs + INVITE_TTL_MS;
+          return {
+            ...inv,
+            expiresAt,
+          };
+        });
+
+        if (!cancelled) {
+          setInvites(withMeta);
+        }
+      } catch (err) {
+        console.error("[ChatLobby] error fetching invites", err);
+      } finally {
+        if (!cancelled) {
+          setLoadingInvites(false);
+        }
+      }
+    };
+
+    fetchInvites();
+    intervalId = setInterval(fetchInvites, 4000);
+
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [account, isDeletingInvite]);
+
   if (!isConnected || !account) {
     return (
       <div className="flex flex-col h-screen w-full bg-[#050709] text-gray-200 font-mono relative overflow-hidden">
@@ -140,10 +217,7 @@ const ChatLobby = () => {
           </h1>
         </div>
         <div className="text-[11px] text-gray-500">
-          you:{" "}
-          <span className="text-gray-300">
-            {account.slice(0, 6)}...{account.slice(-4)}
-          </span>
+          you: <span className="text-gray-300">{account}</span>
         </div>
       </header>
 
@@ -153,42 +227,112 @@ const ChatLobby = () => {
         <section className="flex-1 border border-white/10 bg-[#080a10]/80 backdrop-blur-sm p-4 flex flex-col min-h-[200px]">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xs uppercase tracking-widest text-gray-400">
-              pending_invites
+              open_chatrooms
             </h2>
             {loadingInvites && (
               <span className="text-[10px] text-gray-500">loading...</span>
             )}
           </div>
 
-          {invites.length === 0 && !loadingInvites ? (
+          {invites.length === 0 ? (
             <div className="flex-1 flex items-center justify-center text-[11px] text-gray-600">
               no_pending_invites
             </div>
           ) : (
             <div className="flex-1 space-y-2 overflow-y-auto scrollbar-minimal">
-              {invites.map((invite, idx) => (
-                <button
-                  key={`${invite.roomKey}-${idx}`}
-                  onClick={() => handleOpenInvite(invite)}
-                  className="w-full text-left flex items-center justify-between px-3 py-2 border border-white/10 bg-[#0a0c14]/80 hover:bg-[#0f1018] transition-colors group"
-                >
-                  <div className="flex flex-col">
-                    <span className="text-[11px] text-gray-500">
-                      from:
-                      <span className="text-gray-300 ml-1">
-                        {invite.from.slice(0, 6)}...{invite.from.slice(-4)}
-                      </span>
-                    </span>
-                    <span className="text-[10px] text-gray-600">
-                      room:{" "}
-                      <span className="text-gray-400">{invite.roomKey}</span>
-                    </span>
+              {invites.map((invite, idx) => {
+                const msLeft = Math.max(0, invite.expiresAt - now);
+                const totalSeconds = Math.floor(msLeft / 1000);
+
+                const days = Math.floor(totalSeconds / (24 * 60 * 60));
+                const hours = Math.floor(
+                  (totalSeconds % (24 * 60 * 60)) / (60 * 60)
+                );
+                const minutes = Math.floor((totalSeconds % (60 * 60)) / 60);
+                const seconds = totalSeconds % 60;
+
+                const isExpired = msLeft <= 0;
+
+                const timerLabel = isExpired
+                  ? "00:00:00:00"
+                  : [
+                      days.toString().padStart(2, "0"),
+                      hours.toString().padStart(2, "0"),
+                      minutes.toString().padStart(2, "0"),
+                      seconds.toString().padStart(2, "0"),
+                    ].join(":");
+
+                return (
+                  <div
+                    key={`${invite.roomKey}-${idx}`}
+                    className="flex items-stretch gap-2"
+                  >
+                    {/* LEFT: main open-chat button */}
+                    <button
+                      onClick={() => !isExpired && handleOpenInvite(invite)}
+                      disabled={isExpired}
+                      className={`flex-1 text-left flex items-center justify-between px-3 py-2 border border-white/10 bg-[#0a0c14]/80 hover:bg-[#0f1018] transition-colors group ${
+                        isExpired
+                          ? "opacity-50 cursor-not-allowed hover:bg-[#0a0c14]/80"
+                          : "cursor-pointer"
+                      }`}
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-[11px] text-gray-500">
+                          from:
+                          <span className="text-gray-300 ml-1">
+                            {invite.from}
+                          </span>
+                        </span>
+                        <span className="text-[10px] text-gray-600">
+                          room:{" "}
+                          <span className="text-gray-400">
+                            {invite.roomKey}
+                          </span>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        {/* hacker-style timer */}
+                        <span
+                          className={`text-[11px] font-mono tracking-widest ${
+                            isExpired ? "text-gray-600" : "text-green-400"
+                          }`}
+                        >
+                          [{timerLabel}]
+                        </span>
+                        <span className="text-[11px] text-[#00eaff] group-hover:text-[#36f5ff] uppercase tracking-wider">
+                          open_chat {">"}
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* RIGHT: delete button with trash icon, same height (py-2) */}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteInvite(invite)}
+                      className="cursor-pointer flex items-center justify-center px-3 py-2 border border-white/10 bg-[#0a0c14]/80 text-gray-500 hover:border-red-500/80 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      <svg
+                        className="w-3 h-3"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M3 6h18" />
+                        <path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6" />
+                        <path d="M9 10v7" />
+                        <path d="M12 10v7" />
+                        <path d="M15 10v7" />
+                        <path d="M5 6l1 13a1.5 1.5 0 0 0 1.5 1.4h9a1.5 1.5 0 0 0 1.5-1.4L19 6" />
+                      </svg>
+                    </button>
                   </div>
-                  <span className="text-[11px] text-[#00eaff] group-hover:text-[#36f5ff] uppercase tracking-wider">
-                    open_chat{">"}
-                  </span>
-                </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -221,7 +365,7 @@ const ChatLobby = () => {
               <button
                 type="submit"
                 disabled={!peerAddress.trim() || creating}
-                className="text-xs text-[#00eaff] hover:text-[#36f5ff] disabled:text-gray-700 disabled:cursor-not-allowed uppercase tracking-wider border border-[#00eaff]/50 px-3 py-1 hover:border-[#36f5ff]/80 transition-colors"
+                className="cursor-pointer text-xs text-[#00eaff] hover:text-[#36f5ff] disabled:text-gray-700 disabled:cursor-not-allowed uppercase tracking-wider border border-[#00eaff]/50 px-3 py-1 hover:border-[#36f5ff]/80 transition-colors"
               >
                 {creating ? "opening..." : "open_chatroom>"}
               </button>

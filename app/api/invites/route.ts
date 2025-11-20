@@ -13,6 +13,7 @@ export async function GET(req: Request) {
   }
 
   try {
+    // todo: filter all the expired invitations
     const invites = await listInvitesFor(address);
     return NextResponse.json({ invites });
   } catch (err) {
