@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
 import { deleteArkivEntity } from "@/lib/chat/repository.server";
+import { NextRequest, NextResponse } from "next/server";
 
 type RouteContext = {
   params: Promise<{ entityKey: `0x${string}` }>;
 };
 
-export async function DELETE(_req: Request, context: RouteContext) {
+export async function DELETE(_req: NextRequest, context: RouteContext) {
   const { entityKey } = await context.params;
 
   if (!entityKey) {
