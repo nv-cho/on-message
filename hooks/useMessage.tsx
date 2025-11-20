@@ -102,12 +102,9 @@ export default function useMessage(options?: UseMessageOptions) {
           }
         );
 
-        console.log(msgs);
-
         msgs.sort((a, b) => a.sentAt - b.sentAt);
 
         if (!cancelled) {
-          console.log(msgs.map(toUi));
           setMessages(msgs.map(toUi));
         }
       } catch (err) {

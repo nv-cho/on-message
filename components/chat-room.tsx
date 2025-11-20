@@ -1,11 +1,14 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect, FormEvent } from "react";
 
 import useArkiv from "@/hooks/useArkiv";
 import useMessage from "@/hooks/useMessage";
 
 const ChatRoom = () => {
+  const router = useRouter();
+
   const { account, isConnected, connect } = useArkiv();
   const { messages, sendMessage } = useMessage(
     account
@@ -25,6 +28,10 @@ const ChatRoom = () => {
     if (!inputValue.trim()) return;
     sendMessage(inputValue);
     setInputValue("");
+  };
+
+  const goBackToLobby = () => {
+    router.push("/");
   };
 
   useEffect(() => {
@@ -64,7 +71,7 @@ const ChatRoom = () => {
       <div className="absolute inset-0 bg-grid-pattern pointer-events-none z-0" />
 
       {/* Header */}
-      <header className="h-14 border-b border-white/10 flex items-center px-4 z-10 bg-[#050709]/90 backdrop-blur-sm shrink-0">
+      <header className="h-14 border-b border-white/10 flex items-center justify-between px-4 z-10 bg-[#050709]/90 backdrop-blur-sm shrink-0">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 bg-green-500 animate-pulse rounded-full"></span>
           <h1 className="text-sm tracking-tight text-gray-400 lowercase">
@@ -72,6 +79,13 @@ const ChatRoom = () => {
             <span className="text-gray-100">user-b</span>
           </h1>
         </div>
+        <button
+          type="button"
+          onClick={goBackToLobby}
+          className="cursor-pointer text-[11px] uppercase tracking-wider text-gray-500 hover:text-[#00eaff] transition-colors"
+        >
+          lobby{"  "}&lt;
+        </button>
       </header>
 
       {/* Messages Area */}
@@ -126,7 +140,7 @@ const ChatRoom = () => {
           <button
             type="submit"
             disabled={!inputValue.trim()}
-            className="text-sm text-[#00eaff] hover:text-[#36f5ff] disabled:text-gray-700 disabled:cursor-not-allowed transition-colors uppercase tracking-wider"
+            className="cursor-pointer text-sm text-[#00eaff] hover:text-[#36f5ff] disabled:text-gray-700 disabled:cursor-not-allowed transition-colors uppercase tracking-wider"
           >
             send{">"}
           </button>

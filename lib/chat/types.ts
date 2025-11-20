@@ -19,7 +19,7 @@ export type ChatRoom = {
 export type ChatInviteStatus = "pending" | "accepted" | "rejected";
 
 export type ChatInvite = {
-  entityKey: string;
+  entityKey: `0x${string}`;
   roomKey: string;
   from: string;
   to: string;
