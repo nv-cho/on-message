@@ -1,10 +1,17 @@
 "use client";
 
-import useMessage from "@/hooks/useMessage";
 import { useState, useRef, useEffect, FormEvent } from "react";
 
+import useArkiv from "@/hooks/useArkiv";
+import useMessage from "@/hooks/useMessage";
+
 const ChatRoom = () => {
-  const { messages, sendMessage } = useMessage();
+  const { account, isConnected, connect } = useArkiv();
+  const { messages, sendMessage } = useMessage(
+    account
+      ? { me: account } // peer still comes from URL or default
+      : undefined
+  );
 
   const [inputValue, setInputValue] = useState<string>("");
 
@@ -15,12 +22,41 @@ const ChatRoom = () => {
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    sendMessage(inputValue, "0x000");
+    if (!inputValue.trim()) return;
+    sendMessage(inputValue);
+    setInputValue("");
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // if not connected, show a connect state instead of the chat
+  if (!isConnected || !account) {
+    return (
+      <div className="flex flex-col h-screen w-full bg-[#050709] text-gray-200 font-mono relative overflow-hidden">
+        <div className="absolute inset-0 bg-grid-pattern pointer-events-none z-0" />
+
+        <header className="h-14 border-b border-white/10 flex items-center px-4 z-10 bg-[#050709]/90 backdrop-blur-sm shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+            <h1 className="text-sm tracking-tight text-gray-400 lowercase">
+              chatroom://<span className="text-gray-100">disconnected</span>
+            </h1>
+          </div>
+        </header>
+
+        <main className="flex-1 flex items-center justify-center z-10">
+          <button
+            onClick={connect}
+            className="px-4 py-2 border border-[#00eaff] text-[#00eaff] text-sm uppercase tracking-wider hover:bg-[#00eaff]/10 transition-colors"
+          >
+            connect_wallet
+          </button>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen w-full bg-[#050709] text-gray-200 font-mono relative overflow-hidden">

@@ -1,9 +1,9 @@
-import ChatRoom from "@/components/chat-room";
+import ChatLobby from "@/components/chat-lobby";
 
 export default function Home() {
   return (
     <div>
-      <ChatRoom />
+      <ChatLobby />
     </div>
   );
 }
