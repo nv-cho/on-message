@@ -28,10 +28,8 @@ export default function useMessage(options?: UseMessageOptions) {
 
   const roomKey = params?.roomKey;
 
-  // const me = options?.me ?? searchParams.get("me") ?? "0xUserA"; // fallback for testing
-  // const peer = options?.peer ?? searchParams.get("peer") ?? "0xUserB";
-  const me = searchParams.get("me") ?? "0xUserA";
-  const peer = searchParams.get("peer") ?? "0xUserB";
+  const me = options?.me ?? searchParams.get("me") ?? "0xUserA"; // fallback for testing
+  const peer = options?.peer ?? searchParams.get("peer") ?? "0xUserB";
 
   const [messages, setMessages] = useState<UiMessage[]>([]);
 
