@@ -2,7 +2,7 @@ import { deleteArkivEntity } from "@/lib/chat/repository.server";
 import { NextRequest, NextResponse } from "next/server";
 
 type RouteContext = {
-  params: Promise<{ entityKey: `0x${string}` }>;
+  params: Promise<{ entityKey: string }>;
 };
 
 export async function DELETE(_req: NextRequest, context: RouteContext) {
@@ -13,7 +13,7 @@ export async function DELETE(_req: NextRequest, context: RouteContext) {
   }
 
   try {
-    await deleteArkivEntity(entityKey);
+    await deleteArkivEntity(entityKey as `0x${string}`);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[DELETE invite]", err);
