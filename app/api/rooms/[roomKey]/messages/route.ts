@@ -19,7 +19,7 @@ export async function POST(req: Request, context: RouteContext) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { from, to, text } = body || {};
+  const { from, to, text, sentAt } = body || {};
   if (!from || !text) {
     return NextResponse.json(
       { error: "Missing required fields: from, text" },
@@ -27,9 +27,18 @@ export async function POST(req: Request, context: RouteContext) {
     );
   }
 
+  const sentAtNum =
+    typeof sentAt === "number" && Number.isFinite(sentAt) ? sentAt : Date.now();
+
   try {
-    // todo: there is an nonce colission problem pending to be fixed, dont send messages at the same time from the same address
-    await sendMessage({ roomKey, from, to: to ?? "", text });
+    // note: nonce collision caveat still applies when using same PK in 2 tabs
+    await sendMessage({
+      roomKey,
+      from,
+      to: to ?? "",
+      text,
+      sentAt: sentAtNum,
+    });
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[POST messages]", err);

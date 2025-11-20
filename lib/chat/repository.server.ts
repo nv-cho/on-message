@@ -138,16 +138,16 @@ export async function listMessages(roomKey: string): Promise<ChatMessage[]> {
   return messages.sort((a, b) => a.sentAt - b.sentAt);
 }
 
-// i think this has to be an update entity
 export async function sendMessage(params: {
   roomKey: string;
   from: string;
   to: string;
   text: string;
+  sentAt?: number;
 }): Promise<void> {
   const { roomKey, from, to, text } = params;
   const walletClient = getWalletClient();
-  const now = Date.now();
+  const now = params.sentAt ?? Date.now();
 
   await walletClient.createEntity({
     payload: jsonToPayload({
@@ -166,7 +166,6 @@ export async function sendMessage(params: {
       { key: "text", value: text },
       { key: "sentAt", value: String(now) },
     ],
-
     expiresIn: ExpirationTime.fromDays(3),
   });
 }

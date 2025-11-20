@@ -89,7 +89,7 @@ export default function useMessage(options?: UseMessageOptions) {
             return {
               id:
                 attrs.sentAt !== undefined
-                  ? `${roomKey}-${attrs.sentAt}`
+                  ? `${roomKey}-${sentAt}`
                   : `${roomKey}-${index}`,
               roomKey: attrs.roomKey ?? roomKey,
               from: attrs.from,
@@ -115,13 +115,12 @@ export default function useMessage(options?: UseMessageOptions) {
     };
   }, [roomKey, toUi]);
 
-  // 2) real-time updates using Arkiv watchEntities
+  // 2) real-time updates using Arkiv subscribeEntityEvents
   useEffect(() => {
     if (!roomKey) return;
 
     const publicClient = getBrowserPublicClient();
 
-    // note: in the examples https://arkiv.network/docs#sdk the watchEntities is shwon as example, but in the current version of the SDK this method doesn't exist
     const unsubscribe = publicClient.subscribeEntityEvents(
       {
         async onEntityCreated(event) {
@@ -136,10 +135,7 @@ export default function useMessage(options?: UseMessageOptions) {
               attrs.sentAt !== undefined ? Number(attrs.sentAt) : Date.now();
 
             const msg: ChatMessage = {
-              id:
-                attrs.sentAt !== undefined
-                  ? `${roomKey}-${attrs.sentAt}`
-                  : `${roomKey}-${sentAt}`,
+              id: `${roomKey}-${sentAt}`,
               roomKey: attrs.roomKey ?? roomKey,
               from: attrs.from,
               to: attrs.to,
@@ -163,7 +159,7 @@ export default function useMessage(options?: UseMessageOptions) {
           // not needed for Milestone 0
         },
         onEntityDeleted: () => {
-          // nt needed for Milestone 0
+          // not needed for Milestone 0
         },
       },
       2000 // polling interval in ms
@@ -172,7 +168,7 @@ export default function useMessage(options?: UseMessageOptions) {
     return () => {};
   }, [roomKey, toUi]);
 
-  // 3) send message via API -> server -> Arkiv
+  // 3) send message via API -> server -> Arkiv (with optimistic update)
   const sendMessage = useCallback(
     async (text: string, toOverride?: string) => {
       if (!roomKey) {
@@ -181,20 +177,23 @@ export default function useMessage(options?: UseMessageOptions) {
       }
 
       const to = toOverride ?? peer;
-      const now = Date.now();
+      const sentAt = Date.now();
+
+      const optimisticId = `${roomKey}-${sentAt}`;
 
       const optimistic: UiMessage = {
-        id: `${roomKey}-${now}-optimistic`,
+        id: optimisticId,
         sender: "me",
         text,
-        timestamp: new Date(now).toLocaleTimeString(undefined, {
+        timestamp: new Date(sentAt).toLocaleTimeString(undefined, {
           hour: "2-digit",
           minute: "2-digit",
         }),
         from: me,
-        sentAt: now,
+        sentAt,
       };
 
+      // optimistic append
       setMessages((prev) => [...prev, optimistic]);
 
       try {
@@ -207,6 +206,7 @@ export default function useMessage(options?: UseMessageOptions) {
             from: me,
             to,
             text,
+            sentAt, // send the same sentAt to the server
           }),
         });
 
@@ -214,11 +214,13 @@ export default function useMessage(options?: UseMessageOptions) {
           const errText = await res.text();
           console.error("[useMessage] sendMessage failed", res.status, errText);
           // rollback optimistic if send failed
-          setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+          setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
           return;
         }
       } catch (err) {
         console.error("[useMessage] send error", err);
+        // rollback optimistic on network error too
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       }
     },
     [roomKey, me, peer]
